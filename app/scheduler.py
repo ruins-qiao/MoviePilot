@@ -635,7 +635,7 @@ class Scheduler(ConfigReloadMixin, metaclass=SingletonClass):
                 "interval",
                 id="transfer",
                 name="下载文件整理",
-                minutes=20,
+                minutes=10,
                 kwargs={"job_id": "transfer"},
             )
 
