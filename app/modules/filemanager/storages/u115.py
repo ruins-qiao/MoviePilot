@@ -579,9 +579,17 @@ class U115Pan(StorageBase, metaclass=WeakSingleton):
         target_dir: schemas.FileItem,
         local_path: Path,
         new_name: Optional[str] = None,
+        *,
+        fast_only: bool = False,
     ) -> Optional[schemas.FileItem]:
         """
-        实现带秒传、断点续传和二次认证的文件上传
+        实现秒传、断点续传和二次认证的文件上传。
+
+        :param target_dir: 115 目标目录
+        :param local_path: 本地文件路径
+        :param new_name: 上传后的文件名
+        :param fast_only: 是否在秒传未命中时停止，不进行实际上传
+        :return: 上传成功后的文件项，失败时返回 None
         """
 
         def encode_callback(cb: str) -> str:
@@ -699,6 +707,10 @@ class U115Pan(StorageBase, metaclass=WeakSingleton):
             return uploaded_item or self.__build_uploaded_fileitem(
                 target_path, local_path, file_size
             )
+
+        if fast_only:
+            logger.info(f"【115】{target_name} 未命中秒传，跳过本轮整理")
+            return None
 
         # Step 4: 获取上传凭证
         token_resp = self._request_api("GET", "/open/upload/get_token", "data")

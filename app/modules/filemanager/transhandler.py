@@ -13,6 +13,7 @@ from app.helper.directory import DirectoryHelper
 from app.helper.message import TemplateHelper
 from app.log import logger
 from app.modules.filemanager.storages import StorageBase
+from app.modules.filemanager.storages.fastu115 import U115PanFast
 from app.schemas import (
     TransferInfo,
     TmdbEpisode,
@@ -144,6 +145,7 @@ class TransHandler:
         overwrite_mode: Optional[str] = None,
         episodes_info: List[TmdbEpisode] = None,
         preview: Optional[bool] = False,
+        fast_upload_only: Optional[bool] = False,
     ) -> TransferInfo:
         """
         识别并整理一个文件或者一个目录下的所有文件
@@ -161,6 +163,7 @@ class TransHandler:
         :param overwrite_mode: 覆盖模式
         :param episodes_info: 当前季的全部集信息
         :param preview: 是否仅预览
+        :param fast_upload_only: 是否仅尝试 115 秒传
         :return: TransferInfo、错误信息
         """
 
@@ -417,6 +420,8 @@ class TransHandler:
 
                 target_diritem = target_oper.get_folder(folder_path)
                 if not target_diritem:
+                    if fast_upload_only:
+                        result._silent_skip = True
                     logger.error(f"目标目录 {folder_path} 获取失败")
                     self.__update_result(
                         result=result,
@@ -431,11 +436,16 @@ class TransHandler:
 
                 # 判断是否要覆盖，附加文件强制覆盖
                 overflag = False
+                cleanup_versions_after_transfer = bool(
+                    fast_upload_only and overwrite_mode == "latest"
+                )
                 if not __is_extra_file(fileitem):
                     # 目标文件（严格查询：无法确认状态时拒绝覆盖，避免已有文件被误覆盖）
                     try:
                         target_item = target_oper.get_item_strict(new_file)
                     except StorageQueryError as query_err:
+                        if fast_upload_only:
+                            result._silent_skip = True
                         errmsg = f"无法确认目标文件状态，已跳过整理以避免误覆盖：{new_file} - {query_err}"
                         logger.warn(errmsg)
                         self.__update_result(
@@ -570,7 +580,8 @@ class TransHandler:
                             logger.info(
                                 f"当前整理覆盖模式设置为 {overwrite_mode}，仅保留最新版本，正在删除已有版本文件 ..."
                             )
-                            self.__delete_version_files(target_oper, new_file)
+                            if not fast_upload_only:
+                                self.__delete_version_files(target_oper, new_file)
                 else:
                     # 附加文件 总是需要覆盖
                     overflag = True
@@ -587,8 +598,11 @@ class TransHandler:
                     source_oper=source_oper,
                     target_oper=target_oper,
                     result=result,
+                    fast_upload_only=fast_upload_only,
                 )
                 if not new_item:
+                    if fast_upload_only:
+                        result._silent_skip = True
                     err_msg = err_msg or f"{fileitem.path} 整理后未获取到目标文件信息"
                     logger.error(f"文件 {fileitem.path} 整理失败：{err_msg}")
                     self.__update_result(
@@ -603,6 +617,9 @@ class TransHandler:
                     return result
 
                 logger.info(f"文件 {fileitem.path} 整理成功")
+                if cleanup_versions_after_transfer:
+                    self.__delete_version_files(target_oper, new_file)
+
                 self.__update_result(
                     result=result,
                     success=True,
@@ -616,6 +633,11 @@ class TransHandler:
                 return result
         except Exception as e:
             logger.error(f"媒体整理出错：{e}")
+            if fast_upload_only:
+                result._silent_skip = True
+                result.success = False
+                result.message = str(e)
+                return result
             return TransferInfo(success=False, message=str(e))
 
     @staticmethod
@@ -626,6 +648,7 @@ class TransHandler:
         target_oper: StorageBase,
         target_file: Path,
         transfer_type: str,
+        fast_upload_only: bool = False,
     ) -> Tuple[Optional[FileItem], str]:
         """
         处理单个文件
@@ -717,8 +740,14 @@ class TransHandler:
                 target_fileitem = target_oper.get_folder(target_file.parent)
                 if target_fileitem:
                     # 上传文件
-                    new_item = target_oper.upload(
-                        target_fileitem, filepath, target_file.name
+                    new_item = (
+                        U115PanFast(target_oper).upload(
+                            target_fileitem, filepath, target_file.name
+                        )
+                        if fast_upload_only and target_storage == "u115"
+                        else target_oper.upload(
+                            target_fileitem, filepath, target_file.name
+                        )
                     )
                     if new_item:
                         return new_item, ""
@@ -735,8 +764,14 @@ class TransHandler:
                 target_fileitem = target_oper.get_folder(target_file.parent)
                 if target_fileitem:
                     # 上传文件
-                    new_item = target_oper.upload(
-                        target_fileitem, filepath, target_file.name
+                    new_item = (
+                        U115PanFast(target_oper).upload(
+                            target_fileitem, filepath, target_file.name
+                        )
+                        if fast_upload_only and target_storage == "u115"
+                        else target_oper.upload(
+                            target_fileitem, filepath, target_file.name
+                        )
                     )
                     if new_item:
                         # 删除源文件
@@ -912,6 +947,8 @@ class TransHandler:
         logger.info(f"正在整理目录：{fileitem.path} 到 {target_path}")
         target_item = target_oper.get_folder(target_path)
         if not target_item:
+            if fast_upload_only:
+                result._silent_skip = True
             return None, f"获取目标目录失败：{target_path}"
         event_data = TransferInterceptEventData(
             fileitem=fileitem,
@@ -939,6 +976,7 @@ class TransHandler:
             target_path=target_path,
             transfer_type=transfer_type,
             result=result,
+            fast_upload_only=fast_upload_only,
         )
         if state:
             return target_item, errmsg
@@ -954,6 +992,7 @@ class TransHandler:
         transfer_type: str,
         target_path: Path,
         result: TransferInfo,
+        fast_upload_only: bool = False,
     ) -> Tuple[bool, str]:
         """
         按目录结构整理目录下所有文件
@@ -978,8 +1017,11 @@ class TransHandler:
                     transfer_type=transfer_type,
                     target_path=new_path,
                     result=result,
+                    fast_upload_only=fast_upload_only,
                 )
                 if not state:
+                    if fast_upload_only:
+                        result._silent_skip = True
                     return False, errmsg
             else:
                 # 整理文件
@@ -991,8 +1033,11 @@ class TransHandler:
                     target_oper=target_oper,
                     target_file=new_file,
                     transfer_type=transfer_type,
+                    fast_upload_only=fast_upload_only,
                 )
                 if not new_item:
+                    if fast_upload_only:
+                        result._silent_skip = True
                     return False, errmsg
                 self.__update_result(
                     result=result,
@@ -1014,6 +1059,7 @@ class TransHandler:
         transfer_type: str,
         result: TransferInfo,
         over_flag: Optional[bool] = False,
+        fast_upload_only: bool = False,
     ) -> Tuple[Optional[FileItem], str]:
         """
         整理一个文件，同时处理其他相关文件
@@ -1063,7 +1109,7 @@ class TransHandler:
                 target_file.unlink()
         else:
             exists_item = target_oper.get_item(target_file)
-            if exists_item:
+            if exists_item and not (fast_upload_only and over_flag):
                 if not over_flag:
                     logger.warn(f"文件已存在：【{target_storage}】{target_file}")
                     return None, f"【{target_storage}】{target_file} 已存在"
@@ -1080,6 +1126,7 @@ class TransHandler:
             target_oper=target_oper,
             target_file=target_file,
             transfer_type=transfer_type,
+            fast_upload_only=fast_upload_only,
         )
         if new_item:
             self.__update_result(

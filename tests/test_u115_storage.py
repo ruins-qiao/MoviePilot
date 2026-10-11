@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from app.modules.filemanager.storages.fastu115 import U115PanFast
 from app.modules.filemanager.storages.u115 import U115Pan
 from app.schemas import FileItem
 
@@ -167,6 +168,83 @@ def test_upload_uses_dynamic_part_size(tmp_path):
     determine_part_size_mock.assert_called_once_with(
         local_file.stat().st_size, preferred_size=10 * 1024 * 1024
     )
+
+
+def test_fast_upload_does_not_fall_back_to_oss_when_second_pass_misses(tmp_path):
+    """115 秒传未命中时应在获取 OSS 凭证前结束。"""
+    local_file = tmp_path / "Test.Show.S01E04.mkv"
+    local_file.write_bytes(b"movie")
+    storage = _build_storage()
+    endpoints = []
+
+    def request_api(_method, endpoint, *_args, **_kwargs):
+        endpoints.append(endpoint)
+        if endpoint == "/open/upload/init":
+            return {"state": True, "data": {"status": 1}}
+        return None
+
+    storage._request_api = request_api
+
+    uploaded_item = U115PanFast(storage).upload(
+        _target_dir(), local_file, local_file.name
+    )
+
+    assert uploaded_item is None
+    assert endpoints == ["/open/upload/init"]
+
+
+def test_fast_upload_returns_item_on_second_pass_success(tmp_path):
+    """115 秒传确认成功时应返回文件项且不获取 OSS 凭证。"""
+    local_file = tmp_path / "Test.Show.S01E05.mkv"
+    local_file.write_bytes(b"movie")
+    storage = _build_storage()
+    endpoints = []
+
+    def request_api(_method, endpoint, *_args, **_kwargs):
+        endpoints.append(endpoint)
+        if endpoint == "/open/upload/init":
+            return {"state": True, "data": {"status": 2, "file_id": 123}}
+        if endpoint == "/open/folder/get_info":
+            return {
+                "file_id": 123,
+                "file_category": "1",
+                "file_name": local_file.name,
+                "pick_code": "pickcode",
+                "size": str(local_file.stat().st_size),
+                "utime": 1,
+            }
+        return None
+
+    storage._request_api = request_api
+
+    uploaded_item = U115PanFast(storage).upload(
+        _target_dir(), local_file, local_file.name
+    )
+
+    assert uploaded_item is not None
+    assert uploaded_item.fileid == "123"
+    assert endpoints == ["/open/upload/init", "/open/folder/get_info"]
+
+
+def test_fast_upload_request_error_is_silently_skipped(tmp_path):
+    """115 秒传请求异常时应静默结束且不继续执行 OSS 上传。"""
+    local_file = tmp_path / "Test.Show.S01E06.mkv"
+    local_file.write_bytes(b"movie")
+    storage = _build_storage()
+    endpoints = []
+
+    def request_api(_method, endpoint, *_args, **_kwargs):
+        endpoints.append(endpoint)
+        raise RuntimeError("temporary request failure")
+
+    storage._request_api = request_api
+
+    uploaded_item = U115PanFast(storage).upload(
+        _target_dir(), local_file, local_file.name
+    )
+
+    assert uploaded_item is None
+    assert endpoints == ["/open/upload/init"]
 
 
 def test_upload_part_size_grows_for_large_files():

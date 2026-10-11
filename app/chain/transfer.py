@@ -1129,6 +1129,12 @@ class TransferChain(ChainBase, ConfigReloadMixin, metaclass=Singleton):
                     username=task.username,
                 )
 
+        if transferinfo and transferinfo._silent_skip:
+            logger.info(f"{task.fileitem.name} 未命中 115 秒传，跳过本轮自动整理")
+            # 清除本轮运行中的作业视图任务，避免它阻止后续自动整理重新入队。
+            self.jobview.remove_task(task.fileitem)
+            return True, ""
+
         transferhis = TransferHistoryOper()
         target_dir_path = self.__get_transfer_target_dir_path(transferinfo)
 
@@ -2050,6 +2056,12 @@ class TransferChain(ChainBase, ConfigReloadMixin, metaclass=Singleton):
                 source_oper=source_oper,
                 target_oper=target_oper,
                 preview=task.preview,
+                fast_upload_only=bool(
+                    not task.manual
+                    and not task.preview
+                    and task.fileitem.storage == "local"
+                    and task.target_storage == "u115"
+                ),
             )
             if not transferinfo:
                 logger.error("文件整理模块运行失败")
@@ -3388,7 +3400,24 @@ class TransferChain(ChainBase, ConfigReloadMixin, metaclass=Singleton):
         file_items, inherited_meta_map = _plan_file_items(file_items)
 
         planned_file_count = len(file_items)
-        if cleanup_dest_fileitem and planned_file_count and not preview:
+        automatic_u115_transfer = bool(
+            not manual
+            and not preview
+            and fileitem.storage == "local"
+            and (
+                target_storage == "u115"
+                or (
+                    target_directory
+                    and target_directory.library_storage == "u115"
+                )
+            )
+        )
+        if (
+            cleanup_dest_fileitem
+            and planned_file_count
+            and not preview
+            and not automatic_u115_transfer
+        ):
             state = StorageChain().delete_media_file(cleanup_dest_fileitem)
             if not state:
                 return False, f"{cleanup_dest_fileitem.path} 删除失败"

@@ -419,7 +419,8 @@ class FileManagerModule(_ModuleBase):
                  library_type_folder: Optional[bool] = None, library_category_folder: Optional[bool] = None,
                  episodes_info: List[TmdbEpisode] = None,
                  source_oper: Callable = None, target_oper: Callable = None,
-                 preview: Optional[bool] = False) -> TransferInfo:
+                 preview: Optional[bool] = False,
+                 fast_upload_only: Optional[bool] = False) -> TransferInfo:
         """
         文件整理
         :param fileitem:  文件信息
@@ -435,6 +436,7 @@ class FileManagerModule(_ModuleBase):
         :param episodes_info: 当前季的全部集信息
         :param source_oper: 源存储操作对象
         :param target_oper: 目标存储操作对象
+        :param fast_upload_only: 是否仅尝试 115 秒传
         :return: {path, target_path, message}
         """
         handler = TransHandler()
@@ -537,7 +539,8 @@ class FileManagerModule(_ModuleBase):
                                       episodes_info=episodes_info,
                                       preview=preview,
                                       source_oper=source_oper,
-                                      target_oper=target_oper)
+                                      target_oper=target_oper,
+                                      fast_upload_only=fast_upload_only)
 
     def media_files(self, mediainfo: MediaInfo) -> List[FileItem]:
         """

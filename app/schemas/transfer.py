@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import Any, Callable, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, PrivateAttr
 
 from app.schemas.context import MetaInfo, MediaInfo
 from app.schemas.file import FileItem
@@ -141,6 +141,7 @@ class TransferInfo(BaseModel):
     need_scrape: Optional[bool] = False
     # 是否需要通知
     need_notify: Optional[bool] = False
+    _silent_skip: bool = PrivateAttr(default=False)
 
     def to_dict(self):
         """
