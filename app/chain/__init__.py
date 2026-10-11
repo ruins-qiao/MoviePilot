@@ -1415,6 +1415,7 @@ class ChainBase(metaclass=ABCMeta):
             source_oper: Callable = None,
             target_oper: Callable = None,
             preview: bool = False,
+            fast_upload_only: bool = False,
     ) -> Optional[TransferInfo]:
         """
         文件转移
@@ -1432,6 +1433,7 @@ class ChainBase(metaclass=ABCMeta):
         :param source_oper:  源存储操作类
         :param target_oper:  目标存储操作类
         :param preview: 是否仅预览，不执行实际转移
+        :param fast_upload_only: 是否仅尝试 115 秒传
         :return: {path, target_path, message}
         """
         return self.run_module(
@@ -1450,6 +1452,7 @@ class ChainBase(metaclass=ABCMeta):
             source_oper=source_oper,
             target_oper=target_oper,
             preview=preview,
+            fast_upload_only=fast_upload_only,
         )
 
     def transfer_completed(self, hashs: str, downloader: Optional[str] = None) -> None:
