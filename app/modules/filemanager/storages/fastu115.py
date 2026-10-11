@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
 from app.log import logger
-from app.schemas import FileItem
+from app.schemas import FileItem as _FileItem
 
 if TYPE_CHECKING:
     from app.modules.filemanager.storages.u115 import U115Pan
@@ -20,10 +20,10 @@ class U115PanFast:
 
     def upload(
         self,
-        target_dir: FileItem,
+        target_dir: _FileItem,
         local_path: Path,
         new_name: Optional[str] = None,
-    ) -> Optional[FileItem]:
+    ) -> Optional[_FileItem]:
         """尝试将本地文件秒传到 115，未命中时返回 None。
 
         :param target_dir: 115 目标目录

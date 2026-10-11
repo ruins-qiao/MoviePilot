@@ -2,6 +2,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from app.modules.filemanager.storages.fastu115 import U115PanFast
+from app.modules.filemanager.storages import fastu115
 from app.modules.filemanager.storages.u115 import U115Pan
 from app.schemas import FileItem
 
@@ -191,6 +192,11 @@ def test_fast_upload_does_not_fall_back_to_oss_when_second_pass_misses(tmp_path)
 
     assert uploaded_item is None
     assert endpoints == ["/open/upload/init"]
+
+
+def test_fast_upload_module_does_not_expose_storage_schema_model():
+    """快速上传模块不能向存储动态扫描器暴露带 schema 方法的模型类。"""
+    assert "FileItem" not in fastu115.__dict__
 
 
 def test_fast_upload_returns_item_on_second_pass_success(tmp_path):
