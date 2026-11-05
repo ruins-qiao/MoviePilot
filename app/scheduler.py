@@ -619,23 +619,23 @@ class Scheduler(ConfigReloadMixin, metaclass=SingletonClass):
                     kwargs={"job_id": "subscribe_refresh"},
                 )
 
-            # 关注订阅分享（每1小时）
+            # 关注订阅分享（每24小时）
             self._scheduler.add_job(
                 self.start,
                 "interval",
                 id="subscribe_follow",
                 name="关注的订阅分享",
-                hours=1,
+                hours=24,
                 kwargs={"job_id": "subscribe_follow"},
             )
 
-            # 下载器文件转移（每5分钟）
+            # 下载器文件转移（每60分钟）
             self._scheduler.add_job(
                 self.start,
                 "interval",
                 id="transfer",
                 name="下载文件整理",
-                minutes=5,
+                minutes=60,
                 kwargs={"job_id": "transfer"},
             )
 
@@ -672,13 +672,13 @@ class Scheduler(ConfigReloadMixin, metaclass=SingletonClass):
                     kwargs={"job_id": "data_cleanup"},
                 )
 
-            # 定时检查用户认证，每隔10分钟
+            # 定时检查用户认证，每隔24小时
             self._scheduler.add_job(
                 self.start,
                 "interval",
                 id="user_auth",
                 name="用户认证检查",
-                minutes=10,
+                hours=24,
                 kwargs={"job_id": "user_auth"},
             )
 
@@ -710,7 +710,7 @@ class Scheduler(ConfigReloadMixin, metaclass=SingletonClass):
                 "interval",
                 id="plugin_market_refresh",
                 name="插件市场缓存",
-                minutes=30,
+                hours=24,
                 kwargs={"job_id": "plugin_market_refresh"},
             )
 
